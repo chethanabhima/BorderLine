@@ -3,6 +3,7 @@ import axios from 'axios';
 import { Camera, Upload, Send, ScanText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { extractDataFromDocument } from '../utils/ocr';
+import LiveCamera from '../components/LiveCamera';
 
 export default function DepartureForm() {
   const [formData, setFormData] = useState({
@@ -114,7 +115,7 @@ export default function DepartureForm() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem', marginTop: '1.5rem' }}>
           <div className="form-group">
             <label className="form-label">Capture Photo <Camera size={16} style={{display:'inline', marginLeft:4}} /></label>
-            <input type="file" accept="image/*" capture="environment" className="form-input" onChange={(e) => setPhoto(e.target.files[0])} />
+            <LiveCamera onCapture={(file) => setPhoto(file)} />
           </div>
           <div className="form-group">
             <label className="form-label">Upload Documents (Max 5) <Upload size={16} style={{display:'inline', marginLeft:4}} /></label>

@@ -4,6 +4,7 @@ import { Search, IdCard, CheckCircle, Navigation, Camera, ScanFace, ScanText, Up
 import { useNavigate } from 'react-router-dom';
 import { compareFaces } from '../utils/faceMatch';
 import { extractDataFromDocument } from '../utils/ocr';
+import LiveCamera from '../components/LiveCamera';
 
 export default function RefugeeArrival() {
   const [searchParams, setSearchParams] = useState({ document_number: '', name: '', dob: '' });
@@ -95,6 +96,21 @@ export default function RefugeeArrival() {
     }
   };
 
+  const handleDenial = async () => {
+    setVerifying(true);
+    try {
+      const res = await axios.post('http://localhost:5000/api/refugees/arrival/verify', {
+        name: matchData.name, dob: matchData.dob, document_number: matchData.document_number, rejection_confirmed: true
+      });
+      setSuccess({ ...res.data, isRejection: true });
+      setMatchData(null);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to record denial');
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   return (
     <div className="animate-fade-in" style={{ maxWidth: '800px', margin: '0 auto' }}>
       <h1>Refugee Camp Check-In Verification</h1>
@@ -103,20 +119,28 @@ export default function RefugeeArrival() {
       {error && <div className="badge badge-danger" style={{ display: 'block', marginBottom: '1.5rem', padding: '1rem', fontSize: '1rem' }}>{error}</div>}
 
       {success && (
-        <div className="glass-panel border-l-4" style={{ padding: '2rem', marginBottom: '2rem', borderLeftColor: 'var(--success)' }}>
+        <div className="glass-panel border-l-4" style={{ padding: '2rem', marginBottom: '2rem', borderLeftColor: success.isRejection ? 'var(--danger)' : 'var(--success)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-            <CheckCircle size={32} color="var(--success)" />
-            <h2 style={{ margin: 0, color: 'var(--success)' }}>Identity Verified</h2>
+            {success.isRejection ? <AlertOctagon size={32} color="var(--danger)" /> : <CheckCircle size={32} color="var(--success)" />}
+            <h2 style={{ margin: 0, color: success.isRejection ? 'var(--danger)' : 'var(--success)' }}>
+               {success.isRejection ? 'Identity Flagged / Arrival Rejected' : 'Identity Verified'}
+            </h2>
           </div>
           <p><strong>Name:</strong> {success.refugee.name}</p>
           <p><strong>Status:</strong> {success.refugee.verification_status}</p>
-          <div style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: '8px', border: '1px dashed var(--accent-primary)', marginTop: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', margin: 0 }}>Generated Temporary ID</p>
-              <h3 style={{ margin: 0, letterSpacing: '0.1em' }}>{success.temporary_document}</h3>
+          {!success.isRejection ? (
+            <div style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: '8px', border: '1px dashed var(--accent-primary)', marginTop: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', margin: 0 }}>Generated Temporary ID</p>
+                <h3 style={{ margin: 0, letterSpacing: '0.1em' }}>{success.temporary_document}</h3>
+              </div>
+              <button className="btn btn-primary" onClick={() => navigate('/')}>Complete Check-In</button>
             </div>
-            <button className="btn btn-primary" onClick={() => navigate('/')}>Complete Check-In</button>
-          </div>
+          ) : (
+             <div style={{ marginTop: '1.5rem' }}>
+                <button className="btn btn-secondary" onClick={() => navigate('/')}>Return to Dashboard</button>
+             </div>
+          )}
         </div>
       )}
 
@@ -188,7 +212,7 @@ export default function RefugeeArrival() {
           
           <div className="form-group" style={{ marginTop: '1.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem' }}>
             <label className="form-label">Live Verification Capture <Camera size={16} style={{display:'inline'}} /></label>
-            <input type="file" accept="image/*" capture="environment" className="form-input" onChange={(e) => setLivePhoto(e.target.files[0])} />
+            <LiveCamera onCapture={(file) => setLivePhoto(file)} />
           </div>
 
           {faceMatch.status !== 'idle' && (
@@ -201,6 +225,9 @@ export default function RefugeeArrival() {
           <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem' }}>
             <button className="btn btn-secondary" onClick={() => setMatchData(null)} disabled={verifying}>
               Cancel Match
+            </button>
+            <button className="btn btn-secondary" style={{ color: 'var(--danger)' }} onClick={handleDenial} disabled={verifying}>
+              Deny Arrival
             </button>
             {livePhoto && (
               <button className="btn btn-secondary" onClick={runFaceMatch} disabled={faceMatch.status === 'loading'}>

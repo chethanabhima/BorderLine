@@ -4,6 +4,7 @@ import { Camera, Upload, CheckCircle, AlertOctagon, ScanFace, ScanText } from 'l
 import { useNavigate } from 'react-router-dom';
 import { compareFaces } from '../utils/faceMatch';
 import { extractDataFromDocument } from '../utils/ocr';
+import LiveCamera from '../components/LiveCamera';
 
 export default function ArrivalForm() {
   const [formData, setFormData] = useState({ name: '', dob: '', document_number: '', type: 'Tourist' });
@@ -11,7 +12,8 @@ export default function ArrivalForm() {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
-  const [faceMatch, setFaceMatch] = useState({ status: 'idle', message: '' });
+  const [faceMatchResult, setFaceMatchResult] = useState(null);
+  const [faceMatchLoading, setFaceMatchLoading] = useState(false);
   const [ocrStatus, setOcrStatus] = useState('');
   const navigate = useNavigate();
 
@@ -35,28 +37,9 @@ export default function ArrivalForm() {
 
   const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
-  const runFaceMatch = async () => {
-    if (!photo || documents.length === 0) {
-       setFaceMatch({ status: 'error', message: 'Please upload both an Arrival Photo and an ID Document with a face.' });
-       return;
-    }
-    setFaceMatch({ status: 'loading', message: 'Analyzing facial geometries...' });
-    const res = await compareFaces(photo, documents[0]);
-    if (res.success) {
-      if (res.match) {
-        setFaceMatch({ status: 'success', message: `High confidence match! (Distance: ${res.distance.toFixed(2)})` });
-      } else {
-        setFaceMatch({ status: 'error', message: `Faces do not match. (Distance: ${res.distance.toFixed(2)})` });
-      }
-    } else {
-      setFaceMatch({ status: 'error', message: res.error || 'Failed to detect face in one or both images.' });
-    }
-  };
-
-  const handleVerify = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setResult(null);
+  const handleFaceMatch = async () => {
+    setFaceMatchLoading(true);
+    setFaceMatchResult(null);
 
     const data = new FormData();
     Object.keys(formData).forEach(key => data.append(key, formData[key]));
@@ -66,12 +49,40 @@ export default function ArrivalForm() {
     }
 
     try {
-      const res = await axios.post('http://localhost:5000/api/travelers/arrival/verify', data, {
+      const res = await axios.post('http://localhost:5000/api/travelers/arrival/facematch', data, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      setResult({ type: 'success', data: res.data });
+      setFaceMatchResult(res.data);
     } catch (err) {
-      setResult({ type: 'error', message: err.response?.data?.message || 'Verification Failed. Subject flag required.' });
+      console.error(err);
+      setFaceMatchResult({
+         success: false,
+         results: [err.response?.data?.message || err.response?.data?.error || err.message || 'Face matching failed to execute.']
+      });
+    } finally {
+      setFaceMatchLoading(false);
+    }
+  };
+
+  const handleSubmit = async (finalStatus) => {
+    setLoading(true);
+    setResult(null);
+
+    const data = new FormData();
+    Object.keys(formData).forEach(key => data.append(key, formData[key]));
+    if (photo) data.append('photo', photo);
+    for (let i = 0; i < documents.length; i++) {
+        data.append('documents', documents[i]);
+    }
+    data.append('finalStatus', finalStatus);
+
+    try {
+      const res = await axios.post('http://localhost:5000/api/travelers/arrival/submit', data, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      navigate('/');
+    } catch (err) {
+      setResult({ type: 'error', message: err.response?.data?.message || 'Submission Failed.' });
     } finally {
       setLoading(false);
     }
@@ -86,27 +97,9 @@ export default function ArrivalForm() {
         <div className="glass-panel border-l-4" style={{ padding: '1.5rem', marginBottom: '2rem', borderLeftColor: 'var(--danger)', display:'flex', gap:'1rem', alignItems:'center' }}>
           <AlertOctagon size={32} color="var(--danger)" />
           <div>
-            <h3 style={{margin:0, color:'var(--danger)'}}>Verification Alert</h3>
+            <h3 style={{margin:0, color:'var(--danger)'}}>System Error</h3>
             <p style={{margin:0}}>{result.message}</p>
           </div>
-        </div>
-      )}
-
-      {result && result.type === 'success' && (
-        <div className="glass-panel border-l-4" style={{ padding: '1.5rem', marginBottom: '2rem', borderLeftColor: 'var(--success)', display:'flex', gap:'1rem', alignItems:'center' }}>
-          <CheckCircle size={32} color="var(--success)" />
-          <div style={{flex: 1}}>
-            <h3 style={{margin:0, color:'var(--success)'}}>{result.data.message}</h3>
-            <p style={{margin:0, color:'var(--text-secondary)'}}>Matched Identity: {result.data.traveler.name} ({result.data.traveler.document_number})</p>
-          </div>
-          <button className="btn btn-primary" onClick={() => navigate('/')}>View Dashboard</button>
-        </div>
-      )}
-
-      {faceMatch.status !== 'idle' && (
-        <div className={`badge ${faceMatch.status === 'success' ? 'badge-success' : faceMatch.status === 'error' ? 'badge-danger' : 'badge-warning'}`} style={{ display: 'block', marginBottom: '1.5rem', padding: '1rem', fontSize: '1rem' }}>
-          <ScanFace size={18} style={{ display: 'inline', marginRight: '8px', verticalAlign: 'middle' }} />
-          <span style={{ verticalAlign: 'middle' }}>{faceMatch.message}</span>
         </div>
       )}
 
@@ -117,7 +110,22 @@ export default function ArrivalForm() {
         </div>
       )}
 
-      <form onSubmit={handleVerify} className="glass-panel" style={{ padding: '2rem' }}>
+      {faceMatchResult && (
+        <div className={`glass-panel border-l-4 animate-fade-in`} style={{ padding: '1.5rem', marginBottom: '1.5rem', borderLeftColor: faceMatchResult.success ? 'var(--success)' : 'var(--danger)' }}>
+          <h3 style={{ margin: '0 0 1rem 0', color: faceMatchResult.success ? 'var(--success)' : 'var(--danger)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <ScanFace size={24} /> 3-Way Face Match Results
+          </h3>
+          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+            {faceMatchResult.results.map((res, i) => (
+              <li key={i} style={{ marginBottom: '0.5rem', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                 {res}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <form onSubmit={(e) => e.preventDefault()} className="glass-panel" style={{ padding: '2rem' }}>
         <h3 style={{ marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>Identity Details</h3>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
           <div className="form-group">
@@ -145,7 +153,7 @@ export default function ArrivalForm() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem', marginTop: '1.5rem' }}>
           <div className="form-group">
             <label className="form-label">Arrival Photo <Camera size={16} style={{display:'inline'}} /></label>
-            <input type="file" accept="image/*" capture="environment" className="form-input" onChange={(e) => setPhoto(e.target.files[0])} />
+            <LiveCamera onCapture={(file) => setPhoto(file)} />
           </div>
           <div className="form-group">
             <label className="form-label">Supplementary Docs <Upload size={16} style={{display:'inline'}} /></label>
@@ -154,13 +162,14 @@ export default function ArrivalForm() {
         </div>
 
         <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-          {photo && documents.length > 0 && (
-            <button type="button" className="btn btn-secondary" onClick={runFaceMatch} disabled={faceMatch.status === 'loading'}>
-              {faceMatch.status === 'loading' ? 'Analyzing...' : <><ScanFace size={18} style={{marginRight: 8}} /> Verify Faces</>}
-            </button>
-          )}
-          <button type="submit" className="btn btn-primary" disabled={loading || faceMatch.status === 'loading'}>
-            {loading ? <div className="spinner"></div> : <><CheckCircle size={18} style={{marginRight: 8}} /> Submit Verification</>}
+          <button type="button" className="btn btn-secondary" onClick={handleFaceMatch} disabled={faceMatchLoading || !photo || !formData.document_number}>
+             {faceMatchLoading ? 'Analyzing...' : <><ScanFace size={18} style={{marginRight: 8}} /> Verify Faces (3-Way)</>}
+          </button>
+          <button type="button" className="btn btn-secondary" style={{color: 'var(--danger)'}} onClick={() => handleSubmit('Denied')} disabled={loading || faceMatchLoading}>
+            Reject Entry
+          </button>
+          <button type="button" className="btn btn-primary" onClick={() => handleSubmit('Arrived')} disabled={loading || faceMatchLoading}>
+            {loading ? <div className="spinner"></div> : <><CheckCircle size={18} style={{marginRight: 8}} /> Confirm & Admit</>}
           </button>
         </div>
       </form>

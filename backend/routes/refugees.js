@@ -61,6 +61,12 @@ router.post('/arrival/verify', verifyToken, isHumanitarian, async (req, res) => 
       });
     }
 
+    if (req.body.rejection_confirmed) {
+      refugee.verification_status = 'Rejected';
+      await refugee.save();
+      return res.json({ message: 'Arrival Rejected', refugee });
+    }
+
     res.json({ message: 'Match found, waiting for verbal verification', refugee });
   } catch (err) {
     res.status(500).json({ error: err.message });

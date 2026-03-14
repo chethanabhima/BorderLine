@@ -3,6 +3,7 @@ import axios from 'axios';
 import { Camera, Upload, Send, ScanText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { extractDataFromDocument } from '../utils/ocr';
+import LiveCamera from '../components/LiveCamera';
 
 export default function RefugeeDeparture() {
   const [formData, setFormData] = useState({ name: '', dob: '', document_number: '', extra_info: '' });
@@ -12,6 +13,8 @@ export default function RefugeeDeparture() {
   const [message, setMessage] = useState({ text: '', type: '' });
   const [ocrStatus, setOcrStatus] = useState('');
   const navigate = useNavigate();
+
+  const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
   const handleDocumentUpload = async (e) => {
     const files = e.target.files;
@@ -104,7 +107,7 @@ export default function RefugeeDeparture() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem', marginTop: '1.5rem' }}>
           <div className="form-group">
             <label className="form-label">Required Photo <Camera size={16} style={{display:'inline'}} /></label>
-            <input type="file" required accept="image/*" capture="environment" className="form-input" onChange={(e) => setPhoto(e.target.files[0])} />
+            <LiveCamera onCapture={(file) => setPhoto(file)} />
           </div>
           <div className="form-group">
             <label className="form-label">Identification Docs (Optional) <Upload size={16} style={{display:'inline'}} /></label>

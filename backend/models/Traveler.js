@@ -9,7 +9,7 @@ const travelerSchema = new mongoose.Schema({
   extra_info: { type: String },
   documents: [{ type: String }], // Array of file paths
   photo: { type: String }, // Single file path
-  status: { type: String, enum: ['Departed', 'Arrived', 'Flagged'], default: 'Departed' },
+  status: { type: String, enum: ['Departed', 'Arrived', 'Flagged', 'Denied', 'Rejected', 'Pending Review'], default: 'Departed' },
   entry_date: { type: Date, default: Date.now },
 });
 
